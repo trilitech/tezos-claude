@@ -1,0 +1,5 @@
+# Per-user settings — never commit.
+settings.local.json
+
+# Per-user overrides of team instructions.
+CLAUDE.local.md

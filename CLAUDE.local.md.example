@@ -1,0 +1,4 @@
+@.claude/loading.md
+
+CLAUDE_COMMIT_AUTHOR = "<Your Name>'s Assistant <your-agent-handle@nomadic-labs.com>"
+CLAUDE_BRANCH_PREFIX = "<your-gitlab-handle>"
