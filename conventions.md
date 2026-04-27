@@ -40,6 +40,24 @@ with the real URL, and pick `close` or `ref` on that line:
 Upstream lives on GitLab. Use the `glab` CLI; ask the engineer to
 install it if missing.
 
+### `glab` usage
+
+- **MR body via file.** Write the description to a file (e.g.
+  `/tmp/mr-body.md`) and pass it as `--description "$(cat
+  /tmp/mr-body.md)"`. Inline heredocs with `<<'EOF'` mangle bodies
+  that contain backticks (the fix is *not* to escape them — single
+  quotes preserve `\`` literally, leaving backslashes in the rendered
+  description).
+- **Reading JSON output.** Use `jq -r '.field'` on
+  `glab ... --output json`. Do not invoke `python3 -c` for ad-hoc
+  parsing.
+- **Cross-fork pitfall.** Always pass `--head tezos/tezos` to
+  `glab mr create`. Without it, glab auto-detects the fork
+  relationship between `origin` (tezos/tezos) and `nl`
+  (nomadic-labs/tezos) and resolves the source project as the fork
+  even when the branch was pushed to `origin`, so the MR ends up
+  pointing at a non-existent branch on `nomadic-labs/tezos`.
+
 ## Branch naming
 
 `<CLAUDE_BRANCH_PREFIX>@<description>` — prefix set in
