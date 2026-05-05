@@ -42,11 +42,17 @@ install it if missing.
 
 ### `glab` usage
 
-- **MR body via file.** Write the description to a file (e.g.
-  `/tmp/mr-body.md`) and pass it as `--description "$(cat
-  /tmp/mr-body.md)"`. Inline heredocs with `<<'EOF'` mangle bodies
-  that contain backticks (the fix is *not* to escape them — single
-  quotes preserve `\`` literally, leaving backslashes in the rendered
+- **Updating an MR description.** Write the description to a file
+  (e.g. `/tmp/mr-body.md`) and run
+  `.claude/scripts/glab-mr-update.sh <mr-id> /tmp/mr-body.md` — the
+  script wraps the `-R tezos/tezos` and `--description "$(cat ...)"`
+  convention. To skip the permission prompt, allowlist
+  `Bash(./.claude/scripts/glab-mr-update.sh:*)` in your personal
+  `settings.local.json` (it is intentionally not in the team-shared
+  `settings.json` because the script silently posts to GitLab). Do
+  not use inline heredocs: `<<'EOF'` mangles bodies that contain
+  backticks (the fix is *not* to escape them — single quotes
+  preserve `\`` literally, leaving backslashes in the rendered
   description).
 - **Reading JSON output.** Use `jq -r '.field'` on
   `glab ... --output json`. Do not invoke `python3 -c` for ad-hoc

@@ -2,5 +2,15 @@
   "enabledPlugins": {
     "gitlab@claude-plugins-official": true,
     "linear@claude-plugins-official": true
+  },
+  "permissions": {
+    "allow": [
+      "mcp__gitlab__glab_mr_view",
+      "mcp__linear__get_issue",
+      "mcp__gitlab__glab_mr_diff",
+      "mcp__linear__get_document",
+      "mcp__linear__list_teams",
+      "Bash(cargo check *)"
+    ]
   }
 }
