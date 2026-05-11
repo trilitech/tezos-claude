@@ -35,6 +35,32 @@ with the real URL, and pick `close` or `ref` on that line:
 
 **Ask the engineer for help to tick the checklist if needed.**
 
+## Changelog
+
+Every MR must add an entry to the relevant `CHANGES*` file (find the
+one closest to the component being modified). Do not open the MR
+without a changelog entry — this matches the mandatory checkbox in
+`.claude/mr-template.md`.
+
+Each entry must:
+
+- **Link to the MR.** Include the MR URL or `!<id>` reference on the
+  line so readers can jump from the changelog back to the discussion
+  and diff.
+- **Be descriptive and flag breaking changes explicitly.** Describe
+  what changed from the user's perspective, not which file moved. If
+  the change is breaking (removed/renamed CLI flag, RPC schema bump,
+  on-disk format change, default behavior change), call it out in the
+  line itself — consumers skim release notes and rely on the wording
+  to notice.
+- **Record cross-component version constraints at the release/version
+  header, not only in a bullet.** When a release introduces an
+  incompatibility with another component (e.g. an Etherlink kernel
+  that requires EVM node ≥ X.Y, a node release that drops support for
+  an older baker), state the required peer version in the version
+  section so operators and releasers can gate upgrades on it without
+  reading every bullet.
+
 ## Repository hosting
 
 Upstream lives on GitLab. Use the `glab` CLI; ask the engineer to
