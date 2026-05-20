@@ -25,15 +25,31 @@ the MR. When an MR already exists, verify the linked issue reflects
 the latest branch state before pushing.
 
 The description must follow `.claude/mr-template.md` — read it when
-creating or updating an MR, not before. Replace `<LINEAR_ISSUE_URL>`
-with the real URL, and pick `close` or `ref` on that line:
+creating or updating an MR, not before. The Linear issue line starts
+with a Linear integration keyword (`Closes:`, `Fixes:`, or
+`Contributes:`) followed by an inline markdown link with the Linear
+ID as label — e.g. `Closes: [L2-1324](https://linear.app/tezos/issue/L2-1324/...)`.
+Linear's GitLab integration parses these keywords and updates the
+issue automatically on MR merge:
 
-- `close` — the MR fully resolves the issue; merging it should
-  transition the issue to Done.
-- `ref` — the MR only contributes to the issue (partial work,
+- `Closes:` / `Fixes:` — the MR fully resolves the issue; merging
+  transitions the issue to Done.
+- `Contributes:` — the MR contributes to the issue (partial work,
   follow-up, related change). The issue stays open after merge.
 
 **Ask the engineer for help to tick the checklist if needed.**
+
+### Description conventions
+
+Layout (metadata block, sections, blank-line spacing) is defined by
+`.claude/mr-template.md`. Content rules:
+
+- **`# What` and `# Why` stay high-level.** Reviewers should be able
+  to scan them; don't restate the diff.
+- **`# Manually testing the MR`** — do **not** include checks CI
+  already enforces (`make fmt`, `make check-linting`,
+  `make -f etherlink.mk check`, etc.). Do **not** state test counts
+  ("N tests pass") — they go stale on rebase.
 
 ## Changelog
 
@@ -68,18 +84,13 @@ install it if missing.
 
 ### `glab` usage
 
-- **Updating an MR description.** Write the description to a file
-  (e.g. `/tmp/mr-body.md`) and run
-  `.claude/scripts/glab-mr-update.sh <mr-id> /tmp/mr-body.md` — the
-  script wraps the `-R tezos/tezos` and `--description "$(cat ...)"`
-  convention. To skip the permission prompt, allowlist
-  `Bash(./.claude/scripts/glab-mr-update.sh:*)` in your personal
-  `settings.local.json` (it is intentionally not in the team-shared
-  `settings.json` because the script silently posts to GitLab). Do
-  not use inline heredocs: `<<'EOF'` mangles bodies that contain
-  backticks (the fix is *not* to escape them — single quotes
-  preserve `\`` literally, leaving backslashes in the rendered
-  description).
+- **Creating or updating an MR.** Write the description to a body
+  file at `/tmp/claude-mr-body-<id>.md` (the prefix matches the
+  scoped allowlist rule) and run `.claude/scripts/glab-mr.sh`:
+    - Create: `glab-mr.sh create <body-file> [--title T] [--base B] [--repo R]` — pushes the current branch to `origin`, then opens the MR with `--head tezos/tezos`.
+    - Update: `glab-mr.sh update <mr-id> <body-file> [--repo R]` — replaces the description.
+
+  The script wraps the `-R tezos/tezos` / `--head tezos/tezos` / body-file conventions. The team-shared `.claude/settings.json` allowlist covers both the script invocation and the body-file write under `/tmp/claude-mr-body-*` for all contributors. Do not use inline heredocs: `<<'EOF'` mangles bodies that contain backticks (the fix is *not* to escape them — single quotes preserve `\`` literally, leaving backslashes in the rendered description).
 - **Reading JSON output.** Use `jq -r '.field'` on
   `glab ... --output json`. Do not invoke `python3 -c` for ad-hoc
   parsing.
