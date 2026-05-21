@@ -44,7 +44,7 @@ without a changelog entry — this matches the mandatory checkbox in
 
 Each entry must:
 
-- **Link to the MR.** Include the MR URL or `!<id>` reference on the
+- **Link to the MR.** Include the `!<id>` reference on the
   line so readers can jump from the changelog back to the discussion
   and diff.
 - **Be descriptive and flag breaking changes explicitly.** Describe
