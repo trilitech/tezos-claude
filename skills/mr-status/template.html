@@ -1,0 +1,263 @@
+<!doctype html>
+<!--
+  MR status update — reference template.
+
+  How to use:
+    1. Copy this file to the stable path /tmp/mr-status-latest.html
+       (dated copy /tmp/mr-status-YYYY-MM-DD.html only when archiving).
+    2. Replace the metadata in the header (date, master SHA).
+    3. Collect data per .claude/mr-status.md — including the merge
+       train join (/projects/.../merge_trains, filter status!="merged").
+    4. Replace each EXAMPLE ROW with the real MRs. Duplicate as needed.
+       Any MR present in the train goes in the "On merge train"
+       section regardless of assignees / threads / approvals.
+       The "Assigned to you" section is the inverse query — MRs where
+       you are a reviewer/assignee but did NOT author them.
+    5. Delete EXAMPLE ROW comments before opening.
+    6. Open in the user's default browser: xdg-open /tmp/mr-status-latest.html &
+
+  Self-contained: inline CSS, no network resources. Renders identically
+  offline. Palette is GitHub Dark.
+
+  Badge classes:
+    .b-red    blocker          (conflicts, very stale, failed pipe)
+    .b-amber  waiting / slow   (behind N, awaiting resolve, manual CI)
+    .b-green  good             (clean, approved, all resolved)
+    .b-blue   informational    (review state, ball-on annotations)
+    .b-grey   neutral          (stacked, no reviewers, behind=0)
+    .b-train  on merge train   (car status + age since added)
+
+  Ball-on classes:
+    .ball-you      assignees=[sribaroud only] or unanswered reviewer
+                   thread or no reviewers
+    .ball-others   reviewers only, all threads replied
+    .ball-train    on the merge train — wait for landing, watch for stale
+    .ball-decide   stale draft, very stale, superseded — revive/close
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<!-- Repaint the tab on the same cadence the cron job rewrites this file
+     (900s = 15min). Harmless if opened standalone; just re-reads disk. -->
+<meta http-equiv="refresh" content="900">
+<title>MR status — <!-- AUTHOR --> — <!-- DATE --></title>
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --border: #30363d;
+    --fg: #e6edf3; --muted: #8b949e;
+    --red: #f85149; --amber: #d29922; --green: #3fb950; --blue: #58a6ff; --grey: #6e7681;
+    --train: #a371f7;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+    background: var(--bg); color: var(--fg);
+    margin: 0; padding: 24px 32px;
+    line-height: 1.45;
+  }
+  h1 { margin: 0 0 4px; font-size: 22px; }
+  h2 { margin: 32px 0 12px; font-size: 16px; color: var(--blue);
+       border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+  .meta { color: var(--muted); font-size: 13px; margin-bottom: 8px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--muted); font-weight: 500; font-size: 12px; text-transform: uppercase; letter-spacing: 0.4px; }
+  tr:hover td { background: #1c2128; }
+  a { color: var(--blue); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .mr-id { font-family: ui-monospace, "JetBrains Mono", Menlo, monospace; font-weight: 600; white-space: nowrap; }
+  .title { color: var(--fg); }
+  .badge {
+    display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px;
+    font-family: ui-monospace, monospace; margin-right: 4px; margin-bottom: 2px;
+    border: 1px solid var(--border); background: var(--panel);
+  }
+  .b-red    { color: var(--red);    border-color: rgba(248, 81, 73, 0.4); background: rgba(248, 81, 73, 0.08); }
+  .b-amber  { color: var(--amber);  border-color: rgba(210, 153, 34, 0.4); background: rgba(210, 153, 34, 0.08); }
+  .b-green  { color: var(--green);  border-color: rgba(63, 185, 80, 0.4); background: rgba(63, 185, 80, 0.08); }
+  .b-blue   { color: var(--blue);   border-color: rgba(88, 166, 255, 0.4); background: rgba(88, 166, 255, 0.08); }
+  .b-grey   { color: var(--grey);   border-color: var(--border); background: var(--panel); }
+  .b-train  { color: var(--train);  border-color: rgba(163, 113, 247, 0.4); background: rgba(163, 113, 247, 0.08); }
+  .ball-you    { color: var(--amber); font-weight: 600; }
+  .ball-others { color: var(--green); font-weight: 600; }
+  .ball-train  { color: var(--train); font-weight: 600; }
+  .ball-decide { color: var(--red);   font-weight: 600; }
+  .note { color: var(--muted); font-size: 12px; }
+  .legend { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+  .legend span { font-size: 12px; color: var(--muted); }
+  .queues { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+  .queue { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 14px 16px; }
+  .queue h3 { margin: 0 0 8px; font-size: 14px; color: var(--fg); }
+  .queue ol, .queue ul { margin: 0; padding-left: 18px; font-size: 13px; }
+  .queue li { margin-bottom: 4px; }
+  footer { color: var(--muted); font-size: 12px; margin-top: 36px; padding-top: 16px; border-top: 1px solid var(--border); }
+  code { font-family: ui-monospace, "JetBrains Mono", Menlo, monospace; background: #1c2128; padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+</style>
+</head>
+<body>
+
+<h1>MR status — <!-- AUTHOR (e.g. SylvainAssistant) --></h1>
+<div class="meta">Generated <!-- YYYY-MM-DD --> · target = <code>tezos/tezos</code> · master @ <code><!-- short SHA --></code></div>
+
+<div class="legend">
+  <span><span class="badge b-red">conflicts</span> rebase blocked by conflicts</span>
+  <span><span class="badge b-amber">-N behind</span> commits behind target</span>
+  <span><span class="badge b-green">pipeline</span> CI status</span>
+  <span><span class="badge b-blue">reviews</span> review thread status</span>
+  <span><span class="badge b-train">on train · Nh ago</span> merge-train car</span>
+  <span><span class="ball-you">you</span> / <span class="ball-others">others</span> / <span class="ball-train">train</span> / <span class="ball-decide">decide</span></span>
+</div>
+
+<!--
+  Five-section taxonomy (see .claude/mr-status.md), first-match-wins:
+    On merge train — appears in /merge_trains with status != "merged".
+                     Terminal — assignees / open suggestions are noise.
+    Draft          — draft=true.
+    Needs work     — conflicts, OR author assigned, OR no reviewers yet,
+                     OR last note on an open reviewer thread is a reviewer.
+    Approved       — approval_state Default rule satisfied (2+ approvals),
+                     no conflicts, no unaddressed threads, not on train.
+    In review      — others assigned, no conflicts, threads addressed,
+                     but <2 approvals on the Default rule.
+  Pipeline display order: Needs work → In review → Approved → On merge train → Draft.
+-->
+
+<h2>Needs work</h2>
+<table>
+<thead>
+<tr><th>MR</th><th>Title</th><th>Rebase</th><th>Review</th><th>Next move</th></tr>
+</thead>
+<tbody>
+
+<!-- EXAMPLE ROW — duplicate per MR, then delete this comment. -->
+<tr>
+  <td class="mr-id"><a href="https://gitlab.com/tezos/tezos/-/merge_requests/NNNN">!NNNN</a></td>
+  <td class="title">MR title</td>
+  <td><span class="badge b-red">conflicts</span><span class="badge b-amber">-N</span></td>
+  <td><span class="badge b-red">unanswered review</span></td>
+  <td>Rebase, then reply to open threads.</td>
+</tr>
+
+</tbody>
+</table>
+
+<h2>In review</h2>
+<table>
+<thead>
+<tr><th>MR</th><th>Title</th><th>Rebase</th><th>Review</th><th>Next move</th></tr>
+</thead>
+<tbody>
+
+<!-- EXAMPLE ROW — duplicate per MR, then delete this comment. -->
+<tr>
+  <td class="mr-id"><a href="https://gitlab.com/tezos/tezos/-/merge_requests/NNNN">!NNNN</a></td>
+  <td class="title">MR title (use <code>&lt;code&gt;</code> for identifiers)</td>
+  <td><span class="badge b-green">clean</span><span class="badge b-grey">behind=0</span></td>
+  <td><span class="badge b-amber">awaiting resolve</span></td>
+  <td>Wait on reviewer to resolve / approve.</td>
+</tr>
+
+</tbody>
+</table>
+
+<h2>Approved</h2>
+<table>
+<thead>
+<tr><th>MR</th><th>Title</th><th>Rebase</th><th>Approvals</th><th>Next move</th></tr>
+</thead>
+<tbody>
+
+<!-- EXAMPLE ROW — duplicate per MR. If the section is empty, replace
+     all rows with a single placeholder:
+       <tr><td colspan="5" class="reason">— no MRs in this bucket —</td></tr>
+-->
+<tr>
+  <td class="mr-id"><a href="https://gitlab.com/tezos/tezos/-/merge_requests/NNNN">!NNNN</a></td>
+  <td class="title">MR title</td>
+  <td><span class="badge b-green">clean</span><span class="badge b-grey">behind=0</span></td>
+  <td><span class="badge b-green">@reviewer1, @reviewer2</span></td>
+  <td>Wait on merge-train, or nudge if stalled.</td>
+</tr>
+
+</tbody>
+</table>
+
+<h2>On merge train</h2>
+<table>
+<thead>
+<tr><th>MR</th><th>Title</th><th>Rebase</th><th>Train</th><th>Next move</th></tr>
+</thead>
+<tbody>
+
+<!-- EXAMPLE ROW — duplicate per MR on the train.
+     Train badge: car status (fresh / idle / stale / merging) + age
+     since the car was created. Show "stale" in amber/red — it means
+     the head moved under the train and the car needs a rebase.
+     If the section is empty, replace all rows with a single placeholder:
+       <tr><td colspan="5" class="reason">— no MRs in this bucket —</td></tr>
+-->
+<tr>
+  <td class="mr-id"><a href="https://gitlab.com/tezos/tezos/-/merge_requests/NNNN">!NNNN</a></td>
+  <td class="title">MR title</td>
+  <td><span class="badge b-green">clean</span><span class="badge b-grey">behind=0</span></td>
+  <td><span class="badge b-train">on train · 2h ago</span><span class="badge b-green">fresh</span></td>
+  <td><span class="ball-train">train</span>: wait for landing; revisit if it goes <code>stale</code> or sits past ~6h.</td>
+</tr>
+
+</tbody>
+</table>
+
+<h2>Draft</h2>
+<table>
+<thead>
+<tr><th>MR</th><th>Title</th><th>Rebase</th><th>Next move</th></tr>
+</thead>
+<tbody>
+
+<!-- EXAMPLE ROW — duplicate per draft MR, then delete this comment. -->
+<tr>
+  <td class="mr-id"><a href="https://gitlab.com/tezos/tezos/-/merge_requests/NNNN">!NNNN</a></td>
+  <td class="title">Draft MR title <span class="note">(Linear ref)</span></td>
+  <td><span class="badge b-green">clean</span><span class="badge b-grey">stacked</span></td>
+  <td>Promote to ready after parents land.</td>
+</tr>
+
+</tbody>
+</table>
+
+<h2>Assigned to you — you didn't author these</h2>
+<p class="note">
+  Review requests on your plate: MRs where you (<!-- AUTHOR -->) are in
+  <code>reviewers</code>/<code>assignees</code> but someone else opened them.
+  Query <code>glab api "/merge_requests?reviewer_id=&lt;USER_ID&gt;&amp;scope=all&amp;state=opened"</code>
+  (also <code>assignee_id=&lt;USER_ID&gt;</code>), then drop any where <code>author</code> is you.
+</p>
+<table>
+<thead>
+<tr><th>MR</th><th>Title</th><th>Author</th><th>Rebase</th><th>Review</th><th>Next move</th></tr>
+</thead>
+<tbody>
+
+<!-- EXAMPLE ROW — duplicate per MR, then delete this comment.
+     If the section is empty, replace all rows with:
+       <tr><td colspan="6" class="note">— no review requests assigned to you —</td></tr>
+-->
+<tr>
+  <td class="mr-id"><a href="https://gitlab.com/tezos/tezos/-/merge_requests/NNNN">!NNNN</a></td>
+  <td class="title">MR title</td>
+  <td>@author</td>
+  <td><span class="badge b-green">clean</span><span class="badge b-grey">behind=0</span></td>
+  <td><span class="badge b-amber">awaiting your review</span></td>
+  <td>Review and resolve, or unassign yourself if it's not yours.</td>
+</tr>
+
+</tbody>
+</table>
+
+<footer>
+  Source: <code>glab api /merge_requests?author_id=&lt;USER_ID&gt;</code>
+  · review queue: <code>?reviewer_id=&lt;USER_ID&gt;</code>
+</footer>
+
+</body>
+</html>
