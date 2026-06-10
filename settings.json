@@ -14,6 +14,7 @@
       "Bash(cargo check *)",
       "Bash(glab mr list *)",
       "Bash(.claude/scripts/glab-mr.sh *)",
+      "Bash(./.claude/scripts/ref-hygiene-scan.sh *)",
       "Bash(git status *)",
       "Bash(git blame *)",
       "Write(tmp/claude-mr-body-**)"
