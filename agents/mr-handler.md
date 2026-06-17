@@ -1,6 +1,6 @@
 ---
 name: mr-handler
-description: Handle a GitLab MR for the current (or specified) branch — detect whether to create a new MR or update an existing one, draft the description per `.claude/conventions.md` and `.claude/mr-template.md`, dispatch via `.claude/scripts/glab-mr.sh`. Designed for cross-workflow use — invoke standalone or from any pipeline. Goal: consistent MR shape across team members at low token cost. NOT for code review or implementation. Phrases: "open the MR", "create the MR", "update the MR description", "refresh the MR", "submit this for review", "ship the MR".
+description: Handle a GitLab MR for the current (or specified) branch — detect whether to create a new MR or update an existing one, auto-detect stacked MRs and target the parent branch, draft the description per `.claude/conventions.md` and `.claude/mr-template.md`, dispatch via `.claude/scripts/glab-mr.sh`. Designed for cross-workflow use — invoke standalone or from any pipeline. Goal: consistent MR shape across team members at low token cost. NOT for code review or implementation. Phrases: "open the MR", "create the MR", "update the MR description", "refresh the MR", "submit this for review", "ship the MR", "stacked MR".
 tools: Read, Write, Grep, Glob, Bash
 model: sonnet
 ---
@@ -22,9 +22,9 @@ These are authoritative.
 Invoker provides (or relies on defaults):
 
 - **Branch** — default: current branch via `git branch --show-current`.
-- **Base branch** — default: `master`. For stacked MRs, the invoker should specify the previous MR's branch.
+- **Base branch** — default: `master`. For stacked MRs, the invoker may specify the previous MR's branch; if omitted, the agent attempts to **auto-detect** the stack parent (see § Stack detection).
 - **Spec / RFC URL + Linear ticket** — optional but recommended; surface above `# What` as the `Spec:` line and the Linear keyword line (`Closes:` / `Fixes:` / `Contributes:`) per `.claude/mr-template.md`.
-- **Stacked-MR context** — previous MR ID/URL if applicable, for `Previous:` / `Next:` cross-refs above `# What`.
+- **Stacked-MR context** — previous MR ID/URL if applicable, for `Previous:` / `Next:` cross-refs above `# What`. When not supplied, the agent derives it from the auto-detected parent's open MR.
 - **Iteration context** — optional notes (e.g. "deferred Issues to call out in `# How`").
 - **Mode** — `create` / `update` / `auto` (default `auto`: detect from branch state).
 
@@ -34,13 +34,24 @@ Invoker provides (or relies on defaults):
 2. **Detect mode** (when mode = auto): `glab mr list --source-branch "$(git branch --show-current)" -R tezos/tezos`.
    - Result(s) → **update** the existing MR (use its ID).
    - No result → **create** a new MR.
-3. **Gather context.** `git log <base>..HEAD`, `git diff <base>..HEAD --stat`. Parse Linear ticket ID from branch name pattern (`pec@<project>@<topic>`) if present.
-4. **Draft the description** per `.claude/mr-template.md` and the description conventions in `.claude/conventions.md` (§ Description conventions).
-5. **Write to a body file** at `/tmp/claude-mr-body-<ticket-or-branch>.md` (the `claude-mr-body-` prefix matches the scoped allowlist rule).
-6. **Dispatch via the wrapper script:**
-   - create: `.claude/scripts/glab-mr.sh create <body-file> [--title <title>] [--base <base>]`
+3. **Resolve the base** (see § Stack detection). If the invoker pinned a base, use it. Otherwise auto-detect the stack parent; if one is found with an open MR, set `<base>` to that parent branch and record its MR IID for the `Previous:` line. If none is found, `<base>` stays `master`.
+4. **Gather context.** `git log <base>..HEAD`, `git diff <base>..HEAD --stat`. Parse Linear ticket ID from branch name pattern (`pec@<project>@<topic>`) if present.
+5. **Draft the description** per `.claude/mr-template.md` and the description conventions in `.claude/conventions.md` (§ Description conventions). When stacked, fill the `Previous:` line with the parent MR's IID (and `Next:` if the invoker provided a child MR).
+6. **Write to a body file** at `/tmp/claude-mr-body-<ticket-or-branch>.md` (the `claude-mr-body-` prefix matches the scoped allowlist rule).
+7. **Dispatch via the wrapper script:**
+   - create: `.claude/scripts/glab-mr.sh create <body-file> [--title <title>] [--base <base>]` — for a stacked MR, pass the parent branch as `--base`.
    - update: `.claude/scripts/glab-mr.sh update <mr-id> <body-file>`
-7. **Surface the MR URL.**
+8. **Surface the MR URL.**
+9. **Backref the parent** (stacked MRs only). After creating a stacked MR, update the parent MR's description so its `Next:` line points to the new MR's IID: re-draft the parent body with the `Next:` line filled and run `.claude/scripts/glab-mr.sh update <parent-mr-id> <parent-body-file>`. Skip if the parent already references this MR.
+
+## Stack detection
+
+A stack means this branch is built on another feature branch (which has its own open MR) rather than directly on `master`. When the invoker did not pin a base, detect it with `git` + `glab`:
+
+1. **Find the candidate parent.** From `git log --decorate --oneline master..HEAD`, identify the nearest local branch other than `master`/`main` that is an ancestor of HEAD (e.g. iterate `git for-each-ref --format='%(refname:short)' refs/heads/` and keep branches where `git merge-base --is-ancestor <branch> HEAD` succeeds and `<branch>` is not `master`/`main` nor the current branch; pick the one with the most commits in common, i.e. the closest ancestor).
+2. **Confirm it has an open MR.** `glab mr list --source-branch <parent> --state opened -R tezos/tezos`. No open MR → not a stack; fall back to `master`. The parent already having an open MR means it is already pushed to `origin`, so no extra push is needed.
+3. **Adopt the stack.** Set `<base>` to the parent branch and capture the parent MR's IID for the `Previous:` line. Surface the detected relationship in the output (`stacked on !<parent-iid> (<parent-branch>)`); do not silently retarget when the candidate is ambiguous (multiple equally-close parents) — surface the candidates and fall back to `master` unless the invoker disambiguates.
+4. **Cross-refs.** The new MR gets `Previous: !<parent-iid>`; the parent MR gets `Next: !<new-iid>` via the backref step (procedure step 9).
 
 ## Critical rules
 
@@ -48,9 +59,11 @@ Agent-scope safety. Other description conventions live in `.claude/conventions.m
 
 - **Never modify code, run tests, or create commits.** This agent only drafts and dispatches.
 - **Never `--no-verify` on the push.** If the push is rejected, surface and stop — don't bypass.
+- **Never invent a stack.** Only treat the MR as stacked when a parent branch with an open MR is found (or the invoker declared one). When in doubt, target `master` and say so.
 
 ## Output Contract
 
 - MR URL.
 - One-line summary: `MR !<ID>: <MR title> — <opened against <base> | description updated>.`
+- **Stack**: if stacked, note `stacked on !<parent-iid> (<parent-branch>)` and whether the parent's `Next:` backref was updated. If a stack was plausible but rejected (ambiguous / no open MR), say so.
 - Any issues encountered (push rejection, glab error, multiple MRs found for branch, etc.) with what was tried.
